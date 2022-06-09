@@ -72,6 +72,10 @@ void generate() {
         faces.push_back({i+2, offset+i+1, i+1});
         faces.push_back({offset+i+1, i+2, offset+i+2});
     }
+
+    // for the last side, instead of i and i+1, use k and 1
+    faces.push_back({2, offset+k+1, k+1});
+    faces.push_back({offset+k+1, 2, offset+2});
 }
 
 int main() {
