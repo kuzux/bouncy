@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <functional>
 using namespace std;
 
 #define GL_GLEXT_PROTOTYPES 1
@@ -27,43 +28,82 @@ struct KeyState {
     bool buttons[16];
 };
 
-struct GameState {
-    glm::mat4 view;
-};
-
-// persisted game state
-GameState* st;
-
-// temporaries - regenerated in initialize
-GLuint vao;
-GLuint vbo;
-GLuint program;
-vector<float> cylinder;
-
-glm::mat4 projection;
-glm::mat4 model;
-
 extern "C" void Hello(const char*);
 extern "C" int Initialize(bool, void*);
 extern "C" void Update(KeyState, uint64_t);
 extern "C" void Draw();
 extern "C" void Cleanup();
 
+struct GameState {
+    glm::mat4 cameraTransform;
+    glm::mat4 ballTransform;
+};
+
+// persisted game state
+GameState* st;
+
+struct Drawable {
+    const glm::mat4* transform; // either in game state or the temporary memory. Mutate it there.
+    vector<float> mesh;
+
+    GLuint vao, vbo;
+};
+
+void generateDrawable(Drawable* d, const glm::mat4* transform, function<void(function<void(float)>)> generator) {
+    *d = { transform, vector<float>(), 0, 0 };
+    generator([&](float f){ d->mesh.push_back(f); });
+    
+    glGenVertexArrays(1, &d->vao);
+    glBindVertexArray(d->vao);
+    glGenBuffers(1, &d->vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*d->mesh.size(), &d->mesh[0], GL_STATIC_DRAW);
+}
+
+
+void deleteDrawable(Drawable* d) {
+    glDeleteBuffers(1, &d->vbo);
+    glDeleteVertexArrays(1, &d->vao);
+}
+
+// temporaries - regenerated in initialize
+Drawable cylinder;
+Drawable ball;
+GLuint program;
+
+glm::mat4 cylinderTransform;
+glm::mat4 projection;
+
+// pass the view-projection matrix to draw it
+void drawDrawable(const Drawable* d, glm::mat4 vp) {
+    glm::mat4 mvp = vp * (*d->transform);
+    GLuint mvpLocation = glGetUniformLocation(program, "MVP");
+    glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
+
+    int numVertices = d->mesh.size() / 3;
+
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, d->vao);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    glDrawArrays(GL_TRIANGLES, 0, numVertices);
+    glDisableVertexAttribArray(0);
+}
+
 #define PI 3.141592f
 
-void generateShape() {
-    #define ADD_FACE(i, j, k) { \
-        cylinder.push_back(vertices[(i)].x); \
-        cylinder.push_back(vertices[(i)].y); \
-        cylinder.push_back(vertices[(i)].z); \
-        cylinder.push_back(vertices[(j)].x); \
-        cylinder.push_back(vertices[(j)].y); \
-        cylinder.push_back(vertices[(j)].z); \
-        cylinder.push_back(vertices[(k)].x); \
-        cylinder.push_back(vertices[(k)].y); \
-        cylinder.push_back(vertices[(k)].z); \
-    }
+#define ADD_FACE(i, j, k) { \
+    addItem(vertices[(i)].x); \
+    addItem(vertices[(i)].y); \
+    addItem(vertices[(i)].z); \
+    addItem(vertices[(j)].x); \
+    addItem(vertices[(j)].y); \
+    addItem(vertices[(j)].z); \
+    addItem(vertices[(k)].x); \
+    addItem(vertices[(k)].y); \
+    addItem(vertices[(k)].z); \
+}
 
+void generateCylinder(function<void(float)> addItem) {
     vector<glm::vec3> vertices;
     // how many vertices in a circle
     int k = 40;
@@ -123,29 +163,83 @@ void generateShape() {
     // for the last side, instead of i and i+1, use k and 1
     ADD_FACE(2, offset+k, k);
     ADD_FACE(offset+k, 1, offset+1);
-
-    #undef ADD_FACE
 }
+
+void generateSphere(function<void(float)> addItem) {
+    vector<glm::vec3> vertices;
+
+    // how many vertices in a circle
+    int k = 40;
+
+    // the sphere has k "levels" - each level corresponds to a y value (between 1 and -1)
+    float delta_y = 2.0f / k;
+    float y = 1.0f;
+    for(int i=0; i<k; i++) {
+        float r = sqrtf(1.0f - y * y);
+
+        // each level then contains a circle
+        float theta = 0.0f;
+        float delta_th = 2 * PI / k;
+        for(int i=0; i<k; i++) {
+            float x = r*cos(theta);
+            float z = r*sin(theta);
+            vertices.push_back({x, y, z});
+
+            theta += delta_th;
+        }
+
+        y -= delta_y;
+    }
+
+    // to get vertex (i, j) we need to do i*k+j (+1 for 1 based index)
+    #define IDX0(i, j) ((i)*k+(j))
+
+    // for each level i >= 1, face j >= 1
+    // we connect (i, j) - (i-1, j) - (i, j-1)
+    // and (i-1, j-1) - (i, j-1) - (i-1, j)
+    for(int i=1; i<k; i++) {
+        for(int j=1; j<k; j++) {
+            ADD_FACE(IDX0(i, j), IDX0(i-1, j), IDX0(i, j-1));
+            ADD_FACE(IDX0(i-1, j-1), IDX0(i, j-1), IDX0(i-1, j));
+        }
+
+        // add the final face, use j-1 = k-1, j=0
+        ADD_FACE(IDX0(i, 0), IDX0(i-1, 0), IDX0(i, k-1));
+        ADD_FACE(IDX0(i-1, k-1), IDX0(i, k-1), IDX0(i-1, 0));
+    }
+
+    // add a 2d circle for closing the final layer (use i=k-1)
+    vertices.push_back({ 0.0f, -1.0f, 0.0f }); // center of the circle, has index k*k
+    int final_center = k*k;
+
+    for(int j=1; j<k; j++) {
+        // for each face in the center, what you do is take point i, center, point i+1
+        // to get a counter clockwise winding order
+
+        ADD_FACE(IDX0(k-1, j-1), final_center, IDX0(k-1, j));
+    }
+    ADD_FACE(IDX0(k-1, k-1), final_center, IDX0(k-1, 0));
+
+    #undef IDX0
+}
+
+#undef ADD_FACE
 
 int Initialize(bool reinit, void* state_) {
     st = (GameState*)state_;
 
-    model = glm::mat4(1.f);
+    cylinderTransform = glm::mat4(1.f);
     projection = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 100.f);
     if(!reinit) {
-        st->view = glm::lookAt(glm::vec3(4.f, 3.f, 3.f), 
+        st->cameraTransform = glm::lookAt(glm::vec3(4.f, 3.f, 3.f), 
             glm::vec3(0.f, 0.f, 0.f),
             glm::vec3(0.f, 1.f, 0.f));
+        st->ballTransform = glm::translate(glm::mat4(1.f), glm::vec3(3.f, 0.f, 3.f));
     }
 
-    generateShape();
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
-
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*cylinder.size(), &cylinder[0], GL_STATIC_DRAW);
+    generateDrawable(&cylinder, &cylinderTransform, generateCylinder);
+    generateDrawable(&ball, &st->ballTransform, generateSphere);
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
@@ -245,9 +339,9 @@ void Update(KeyState keys, uint64_t dt_ms) {
 
     if(x != 0 || y != 0 || z != 0) {
         if(keys.buttons[0]) {
-            st->view = glm::rotate(st->view, dt, glm::normalize(glm::vec3(x, y, z)));
+            st->cameraTransform = glm::rotate(st->cameraTransform, dt, glm::normalize(glm::vec3(x, y, z)));
         } else {
-            st->view = glm::translate(st->view, dt*glm::vec3(x, y, z));
+            st->cameraTransform = glm::translate(st->cameraTransform, dt*glm::vec3(x, y, z));
         }
     }
 }
@@ -255,25 +349,16 @@ void Update(KeyState keys, uint64_t dt_ms) {
 void Draw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glm::mat4 mvp = projection * st->view * model;
+    glm::mat4 vp = projection * st->cameraTransform;
 
     glUseProgram(program);
-
-    GLuint mvpLocation = glGetUniformLocation(program, "MVP");
-    glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
-
-    int num_vertices = cylinder.size() / 3;
-
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, vao);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-    glDrawArrays(GL_TRIANGLES, 0, num_vertices);
-    glDisableVertexAttribArray(0);
+    drawDrawable(&cylinder, vp);
+    drawDrawable(&ball, vp);
 }
 
 void Cleanup() {
-    glDeleteBuffers(1, &vbo);
-    glDeleteVertexArrays(1, &vao);
+    deleteDrawable(&cylinder);
+    deleteDrawable(&ball);
     glDeleteProgram(program);
 }
 

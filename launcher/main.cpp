@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
     if(rc) return rc;
 
     void* gameState = (void*)(new uint8_t[1 << 27]);
+    memset(gameState, 0, 1 << 27);
     rc = _Initialize(false, gameState);
     if(rc) return rc;
 
