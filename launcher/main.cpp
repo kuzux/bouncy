@@ -4,6 +4,7 @@
 #include <SDL.h>
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengl.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 using namespace std;
 
@@ -20,14 +21,23 @@ GLuint vao;
 GLuint vbo;
 GLuint program;
 
+glm::mat4 projection;
+glm::mat4 view;
+glm::mat4 model;
+
 int Initialize() {
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
+
+    projection = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 100.f);
+    view = glm::lookAt(glm::vec3(4.f, 3.f, 3.f), 
+        glm::vec3(0.f, 0.f, 0.f),
+        glm::vec3(0.f, 1.f, 0.f));
+    model = glm::mat4(1.f);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    printf("binding buffer data\n");
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
@@ -115,16 +125,31 @@ int Initialize() {
     return 0;
 }
 
+void Update() {
+
+}
+
 void Draw() {
-    // glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    glm::mat4 mvp = projection * view * model;
+
     glUseProgram(program);
+
+    GLuint mvpLocation = glGetUniformLocation(program, "MVP");
+    glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
+
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, vao);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glDisableVertexAttribArray(0);
+}
+
+void Cleanup() {
+    glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao);
+    glDeleteProgram(program);
 }
 
 int main() {
@@ -137,20 +162,19 @@ int main() {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetSwapInterval(1); // turn on vsync
 
     SDL_Window* win = win = SDL_CreateWindow("sdl opengl thingy", 
         0, 0,
-        800, 800, 
+        800, 600, 
         SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL );
     assert(win);
 
     SDL_GLContext ctx = SDL_GL_CreateContext(win);
     SDL_GL_MakeCurrent(win, ctx);
 
-
-
     int rc;
-    glViewport(0, 0, 800, 800);
+    glViewport(0, 0, 800, 600);
     if((rc = Initialize())) {
         return rc;
     };
@@ -166,9 +190,12 @@ int main() {
             if(e.type == SDL_QUIT) running = false;
         }
 
+        Update();
         Draw();
         SDL_GL_SwapWindow(win);
     }
+
+    Cleanup();
 
     SDL_GL_DeleteContext(ctx);
     SDL_DestroyWindow(win);
