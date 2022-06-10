@@ -2,7 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
-
+#include <dlfcn.h>
 #include <SDL.h>
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL_opengl.h>
@@ -263,6 +263,21 @@ void Cleanup() {
     glDeleteProgram(program);
 }
 
+void testDylib(const char* path) {
+    void* handle = dlopen(path, 0);
+    if(!handle) {
+        cerr << "Could not open shared library at " << path << "\n";
+        return;
+    }
+    void (*Hello)(const char*) = (void (*)(const char*))dlsym(handle, "Hello");
+    if(!Hello) {
+        cerr << "Could not load function Hello\n";
+    }
+
+    Hello("World");
+    dlclose(handle);
+}
+
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -289,6 +304,8 @@ int main() {
     if((rc = Initialize())) {
         return rc;
     };
+
+    testDylib("../game/bin/game.dylib");
 
     KeyState keys = {};
     bool running = true;
