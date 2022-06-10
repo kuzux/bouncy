@@ -3,5 +3,9 @@
         "string_view": "cpp",
         "limits": "cpp",
         "sstream": "cpp"
-    }
+    },
+    "C_Cpp.default.includePath": [
+        "/opt/homebrew/include/SDL2",
+        "/opt/homebrew/include/"
+    ]
 }
