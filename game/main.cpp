@@ -36,20 +36,24 @@ extern "C" void Cleanup();
 
 struct GameState {
     glm::mat4 cameraTransform;
-    glm::mat4 ballTransform;
+
+    glm::vec3 ballPosition;
+    glm::vec3 ballVelocity;
+    glm::vec3 ballForce;
 };
 
 // persisted game state
 GameState* st;
 
 struct Drawable {
-    const glm::mat4* transform; // either in game state or the temporary memory. Mutate it there.
+    // store position / rotation etc. vectors in the state to calculaste / update this value
+    glm::mat4 transform;
     vector<float> mesh;
 
     GLuint vao, vbo;
 };
 
-void generateDrawable(Drawable* d, const glm::mat4* transform, function<void(function<void(float)>)> generator) {
+void generateDrawable(Drawable* d, const glm::mat4 transform, function<void(function<void(float)>)> generator) {
     *d = { transform, vector<float>(), 0, 0 };
     generator([&](float f){ d->mesh.push_back(f); });
     
@@ -59,7 +63,6 @@ void generateDrawable(Drawable* d, const glm::mat4* transform, function<void(fun
     glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(float)*d->mesh.size(), &d->mesh[0], GL_STATIC_DRAW);
 }
-
 
 void deleteDrawable(Drawable* d) {
     glDeleteBuffers(1, &d->vbo);
@@ -76,7 +79,7 @@ glm::mat4 projection;
 
 // pass the view-projection matrix to draw it
 void drawDrawable(const Drawable* d, glm::mat4 vp) {
-    glm::mat4 mvp = vp * (*d->transform);
+    glm::mat4 mvp = vp * (d->transform);
     GLuint mvpLocation = glGetUniformLocation(program, "MVP");
     glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
 
@@ -225,6 +228,10 @@ void generateSphere(function<void(float)> addItem) {
 
 #undef ADD_FACE
 
+glm::mat4 ballTransformFromState() {
+    return glm::scale(glm::translate(glm::mat4(1.f), st->ballPosition), glm::vec3(.3f));
+}
+
 int Initialize(bool reinit, void* state_) {
     st = (GameState*)state_;
 
@@ -234,12 +241,15 @@ int Initialize(bool reinit, void* state_) {
         st->cameraTransform = glm::lookAt(glm::vec3(4.f, 3.f, 3.f), 
             glm::vec3(0.f, 0.f, 0.f),
             glm::vec3(0.f, 1.f, 0.f));
-        st->ballTransform = glm::translate(glm::mat4(1.f), glm::vec3(3.f, 0.f, 3.f));
+        
+        st->ballPosition = glm::vec3(2.f, .3f, 2.f);
+        st->ballVelocity = glm::vec3(0.f);
+        st->ballForce = glm::vec3(0.f, 10.f, 0.f);
     }
 
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
-    generateDrawable(&cylinder, &cylinderTransform, generateCylinder);
-    generateDrawable(&ball, &st->ballTransform, generateSphere);
+    generateDrawable(&cylinder, cylinderTransform, generateCylinder);
+    generateDrawable(&ball, ballTransformFromState(), generateSphere);
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
@@ -344,6 +354,22 @@ void Update(KeyState keys, uint64_t dt_ms) {
             st->cameraTransform = glm::translate(st->cameraTransform, dt*glm::vec3(x, y, z));
         }
     }
+
+    float ballMass = 2.f;
+
+    st->ballVelocity += (st->ballForce / ballMass) * dt;
+    st->ballPosition += st->ballVelocity * dt;
+
+    st->ballForce += ballMass * glm::vec3(0.f, -9.8f, 0.f) * dt; // gravity
+
+    printf("ball y %f vy %f\n", st->ballPosition.y, st->ballVelocity.y);
+    if(st->ballPosition.y < .3f) {
+        // let it bounce
+        st->ballForce = glm::vec3(0.f, 10.f, 0.f);
+        st->ballVelocity = glm::vec3(0.f);
+        st->ballPosition = glm::vec3(2.f, .3f, 2.f);
+    }
+    ball.transform = ballTransformFromState();
 }
 
 void Draw() {
