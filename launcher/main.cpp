@@ -25,6 +25,22 @@ glm::mat4 projection;
 glm::mat4 view;
 glm::mat4 model;
 
+struct KeyState {
+    // virtual game pad with 2 analogs, a d-pad and 16 "regular" buttons
+
+    float a1x, a1y;
+    float a2x, a2y;
+
+    union {
+        bool elements[4];
+        struct {
+            bool up, down, left, right;
+        };
+    } dirs;
+
+    bool buttons[16];
+};
+
 int Initialize() {
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 
@@ -125,8 +141,24 @@ int Initialize() {
     return 0;
 }
 
-void Update() {
+// the delta t is in milliseconds
+void Update(KeyState keys, uint64_t dt_ms) {
+    float x = 0.f, y = 0.f, z = 0.f;
+    float dt = dt_ms / 1000.f;
+    if(keys.dirs.down) z -= 1.f;
+    if(keys.dirs.up) z += 1.f;
+    if(keys.dirs.left) x -= 1.f;
+    if(keys.dirs.right) x += 1.f;
+    if(keys.buttons[1]) y -= 1.f;
+    if(keys.buttons[2]) y += 1.f;
 
+    if(x != 0 || y != 0 || z != 0) {
+        if(keys.buttons[0]) {
+            view = glm::rotate(view, dt, glm::normalize(glm::vec3(x, y, z)));
+        } else {
+            view = glm::translate(view, dt*glm::vec3(x, y, z));
+        }
+    }
 }
 
 void Draw() {
@@ -179,7 +211,9 @@ int main() {
         return rc;
     };
 
+    KeyState keys = {};
     bool running = true;
+    uint64_t ticks = SDL_GetTicks64();
     while(running) {
         SDL_Event e;
         // we need to drain the event queue on each "frame" to be
@@ -188,9 +222,64 @@ int main() {
         // display (due to triple buffering, I guess)
         while(SDL_PollEvent(&e)) {
             if(e.type == SDL_QUIT) running = false;
+
+            // TODO: Handle the case where the key was pressed and released more
+            // than once within a single frame
+            if(e.type == SDL_KEYDOWN) {
+                switch(e.key.keysym.sym) {
+                case SDLK_UP: 
+                    keys.dirs.up = true;
+                    break;
+                case SDLK_DOWN: 
+                    keys.dirs.down = true;
+                    break;
+                case SDLK_LEFT: 
+                    keys.dirs.left = true;
+                    break;
+                case SDLK_RIGHT: 
+                    keys.dirs.right = true;
+                    break;
+                case SDLK_LSHIFT:
+                    keys.buttons[0] = true;
+                    break;
+                case SDLK_a:
+                    keys.buttons[1] = true;
+                    break;
+                case SDLK_q:
+                    keys.buttons[2] = true;
+                    break;
+                }
+            } else if(e.type == SDL_KEYUP) {
+                switch(e.key.keysym.sym) {
+                case SDLK_UP: 
+                    keys.dirs.up = false;
+                    break;
+                case SDLK_DOWN: 
+                    keys.dirs.down = false;
+                    break;
+                case SDLK_LEFT: 
+                    keys.dirs.left = false;
+                    break;
+                case SDLK_RIGHT: 
+                    keys.dirs.right = false;
+                    break;
+                case SDLK_LSHIFT:
+                    keys.buttons[0] = false;
+                    break;
+                case SDLK_a:
+                    keys.buttons[1] = false;
+                    break;
+                case SDLK_q:
+                    keys.buttons[2] = false;
+                    break;
+                }
+            }
         }
 
-        Update();
+        // I'm not totally sure about it but the delta t calculation might not be the most accurate
+        uint64_t newticks = SDL_GetTicks64();
+        Update(keys, newticks - ticks);
+        ticks = newticks;
         Draw();
         SDL_GL_SwapWindow(win);
     }
