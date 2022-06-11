@@ -58,6 +58,8 @@ struct Drawable {
     glm::mat4 transform;
     // stored separately to allow for instancing
     const Mesh* mesh;
+    // rgb value
+    glm::vec3 color;
 };
 
 // temporaries - regenerated in initialize
@@ -95,6 +97,9 @@ void drawDrawable(const Drawable* d, glm::mat4 vp) {
     glm::mat4 mvp = vp * (d->transform);
     GLuint mvpLocation = glGetUniformLocation(program, "MVP");
     glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
+
+    GLuint colorLocation = glGetUniformLocation(program, "ObjectColor");
+    glUniform3fv(colorLocation, 1, &d->color[0]);
 
     int numVertices = d->mesh->data.size() / 3;
 
@@ -340,7 +345,9 @@ void generatePlatformSection(function<void(float)> addItem) {
 void generatePlatforms() {
     float theta = 0.0;
     float delta = 2*PI / 32;
-    glm::vec3 axis = glm::vec3(0.f, 1.f, 0.f);
+    glm::vec3 axis(0.f, 1.f, 0.f);
+
+    glm::vec3 blue(0.f, 0.f, 1.f);
 
     int numLevels = 5;
     float levelHeight = 2.f;
@@ -348,7 +355,7 @@ void generatePlatforms() {
     for(int l=0; l<numLevels; l++) {
         glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
         for(int i=0; i<32; i++) {
-            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta, axis), &platformMesh });
+            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta, axis), &platformMesh, blue });
             theta += delta;
         }
         height += levelHeight;
@@ -383,12 +390,16 @@ int Initialize(bool reinit, void* state_) {
 
     view = cameraTransformFromState();
 
-    glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
+    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.0f, 0.1f, 0.0f, 0.0f);
+    glm::vec3 red(1.f, 0.f, 0.f);
+    glm::vec3 blue(0.f, 0.f, 1.f);
+
     generateMesh(&cylinderMesh, generateCylinder);
     generateMesh(&sphereMesh, generateSphere);
     generateMesh(&platformMesh, generatePlatformSection);
-    cylinder = { cylinderTransform, &cylinderMesh };
-    ball = { ballTransformFromState(), &sphereMesh };
+    cylinder = { cylinderTransform, &cylinderMesh, blue };
+    ball = { ballTransformFromState(), &sphereMesh, red };
     generatePlatforms();
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
@@ -507,7 +518,7 @@ void Update(KeyState keys, uint64_t dt_ms) {
         // let it bounce
         st->ballForce = glm::vec3(0.f, 10.f, 0.f);
         st->ballVelocity = glm::vec3(0.f);
-        st->ballPosition = glm::vec3(2.f, .3f, 2.f);
+        st->ballPosition.y = .3f;
     }
 
     if(st->ballPosition.y <= st->cameraHeight - 1.f) {
