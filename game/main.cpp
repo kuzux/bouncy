@@ -37,7 +37,7 @@ extern "C" void Draw();
 extern "C" void Cleanup();
 
 struct GameState {
-    glm::mat4 cameraTransform;
+    float cameraHeight;
 
     glm::vec3 ballPosition;
     glm::vec3 ballVelocity;
@@ -67,11 +67,11 @@ Mesh platformMesh;
 
 Drawable cylinder;
 Drawable ball;
-Drawable ball2;
 vector<Drawable> platformSections;
 GLuint program;
 
 glm::mat4 cylinderTransform;
+glm::mat4 view;
 glm::mat4 projection;
 
 void generateMesh(Mesh* m, function<void(function<void(float)>)> generator) {
@@ -359,6 +359,14 @@ glm::mat4 ballTransformFromState() {
     return glm::scale(glm::translate(glm::mat4(1.f), st->ballPosition), glm::vec3(.3f));
 }
 
+glm::mat4 cameraTransformFromState() {
+    return glm::lookAt(
+        glm::vec3(0.f, st->cameraHeight, 5.f),
+        glm::vec3(0.f, st->cameraHeight-0.5f, 0.f),
+        glm::vec3(0.f, 1.f, 0.f)
+    );
+}
+
 int Initialize(bool reinit, void* state_) {
     backward::SignalHandling sh;
     st = (GameState*)state_;
@@ -366,14 +374,14 @@ int Initialize(bool reinit, void* state_) {
     cylinderTransform = glm::mat4(1.f);
     projection = glm::perspective(glm::radians(70.0f), 4.0f / 3.0f, 0.1f, 100.f);
     if(!reinit) {
-        st->cameraTransform = glm::lookAt(glm::vec3(4.f, 3.f, 3.f), 
-            glm::vec3(0.f, 0.f, 0.f),
-            glm::vec3(0.f, 1.f, 0.f));
-        
-        st->ballPosition = glm::vec3(2.f, .3f, 2.f);
+        st->ballPosition = glm::vec3(0.f, 11.f, 1.f);
         st->ballVelocity = glm::vec3(0.f);
         st->ballForce = glm::vec3(0.f, 10.f, 0.f);
+
+        st->cameraHeight = st->ballPosition.y;
     }
+
+    view = cameraTransformFromState();
 
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
     generateMesh(&cylinderMesh, generateCylinder);
@@ -381,7 +389,6 @@ int Initialize(bool reinit, void* state_) {
     generateMesh(&platformMesh, generatePlatformSection);
     cylinder = { cylinderTransform, &cylinderMesh };
     ball = { ballTransformFromState(), &sphereMesh };
-    ball2 = { glm::translate(ball.transform, glm::vec3(3.f, 0.f, 3.f)), &sphereMesh };
     generatePlatforms();
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
@@ -480,13 +487,13 @@ void Update(KeyState keys, uint64_t dt_ms) {
     if(keys.buttons[1]) y -= 1.f;
     if(keys.buttons[2]) y += 1.f;
 
-    if(x != 0 || y != 0 || z != 0) {
+    /*if(x != 0 || y != 0 || z != 0) {
         if(keys.buttons[0]) {
             st->cameraTransform = glm::rotate(st->cameraTransform, dt, glm::normalize(glm::vec3(x, y, z)));
         } else {
             st->cameraTransform = glm::translate(st->cameraTransform, dt*glm::vec3(x, y, z));
         }
-    }
+    }*/
 
     float ballMass = 2.f;
 
@@ -502,19 +509,24 @@ void Update(KeyState keys, uint64_t dt_ms) {
         st->ballVelocity = glm::vec3(0.f);
         st->ballPosition = glm::vec3(2.f, .3f, 2.f);
     }
+
+    if(st->ballPosition.y <= st->cameraHeight - 1.f) {
+        // let camera follow the falling ball
+        st->cameraHeight = st->ballPosition.y + 1.f;
+    }
+
     ball.transform = ballTransformFromState();
-    ball2.transform = glm::translate(ball.transform, glm::vec3(3.f, 0.f, 3.f));
+    view = cameraTransformFromState();
 }
 
 void Draw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glm::mat4 vp = projection * st->cameraTransform;
+    glm::mat4 vp = projection * view;
 
     glUseProgram(program);
     drawDrawable(&cylinder, vp);
     drawDrawable(&ball, vp);
-    drawDrawable(&ball2, vp);
     for(auto& ps : platformSections) {
         drawDrawable(&ps, vp);
     }
