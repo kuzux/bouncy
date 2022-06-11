@@ -51,7 +51,7 @@ void generate() {
 
     for(int i=1; i<k; i++) {
         // for each face in the center, what you do is take point i, center, point i+1
-        // to get a counter clockwise winding order
+        // to get a clockwise winding order
 
         faces.push_back({i+1, 1, i+2});
     }

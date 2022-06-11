@@ -141,7 +141,7 @@ void generateCylinder(function<void(float)> addItem) {
 
     for(int i=1; i<k; i++) {
         // for each face in the center, what you do is take point i, center, point i+1
-        // to get a counter clockwise winding order
+        // to get a clockwise winding order
 
         ADD_FACE(i, 0, i+1);
     }
@@ -217,7 +217,7 @@ void generateSphere(function<void(float)> addItem) {
 
     for(int j=1; j<k; j++) {
         // for each face in the center, what you do is take point i, center, point i+1
-        // to get a counter clockwise winding order
+        // to get a clockwise winding order
 
         ADD_FACE(IDX0(k-1, j-1), final_center, IDX0(k-1, j));
     }
