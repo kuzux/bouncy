@@ -9,6 +9,7 @@
     },
     "C_Cpp.default.includePath": [
         "/opt/homebrew/include/SDL2",
-        "/opt/homebrew/include/"
+        "/opt/homebrew/include/",
+        "vendor/"
     ]
 }

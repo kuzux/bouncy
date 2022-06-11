@@ -5,6 +5,9 @@
 #include <functional>
 using namespace std;
 
+#define BACKWARD_HAS_BFD 1
+#include <backward.hpp>
+
 #define GL_GLEXT_PROTOTYPES 1
 #define GL_SILENCE_DEPRECATION // make osx complain less
 #include <OpenGL/gl3.h> // this should normally be GL/gl3.h
@@ -233,6 +236,7 @@ glm::mat4 ballTransformFromState() {
 }
 
 int Initialize(bool reinit, void* state_) {
+    backward::SignalHandling sh;
     st = (GameState*)state_;
 
     cylinderTransform = glm::mat4(1.f);
@@ -362,7 +366,7 @@ void Update(KeyState keys, uint64_t dt_ms) {
 
     st->ballForce += ballMass * glm::vec3(0.f, -9.8f, 0.f) * dt; // gravity
 
-    printf("ball y %f vy %f\n", st->ballPosition.y, st->ballVelocity.y);
+    // printf("ball y %f vy %f\n", st->ballPosition.y, st->ballVelocity.y);
     if(st->ballPosition.y < .3f) {
         // let it bounce
         st->ballForce = glm::vec3(0.f, 10.f, 0.f);
