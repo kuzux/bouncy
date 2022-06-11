@@ -75,8 +75,8 @@ void generate() {
 
     // bottom face
     for(int i=0; i<k-1; i++) {
-        ADD_FACE(i+1, k+i, i);
-        ADD_FACE(k+i+1, k+i, i+1);
+        ADD_FACE(i, k+i, i+1);
+        ADD_FACE(i+1, k+i, k+i+1);
     }
 
     // top face
@@ -86,15 +86,16 @@ void generate() {
     }
 
     // side faces similar
-    // bottom i+1, top i, bottom i
-    // top i+1, top i, bottom i+1
+    // bottom i, top i, bottom i+1
+    // bottom i+1, top i, top i+1
     for(int i=0; i<k-1; i++) {
         // inner ring
+        // the winding is reverse, since the "inside" face is front-facing
         ADD_FACE(i+1, 2*k+i, i);
         ADD_FACE(2*k+i+1, 2*k+i, i+1);
         // outer ring
-        ADD_FACE(k+i+1, 3*k+i, k+i);
-        ADD_FACE(3*k+i+1, 3*k+i, k+i+1);
+        ADD_FACE(k+i, 3*k+i, k+i+1);
+        ADD_FACE(k+i+1, 3*k+i, 3*k+i+1);
     }
 
     // side with i=0
@@ -104,8 +105,9 @@ void generate() {
     ADD_FACE(2*k, 3*k, 0);
 
     // similarly with i=k-1
-    ADD_FACE(3*k+k-1, k+k-1, k-1);
-    ADD_FACE(2*k+k-1, 3*k+k-1, k-1);
+    // but the winding is reversed again
+    ADD_FACE(k-1, k+k-1, 3*k+k-1);
+    ADD_FACE(k-1, 3*k+k-1, 2*k+k-1);
 }
 
 int main() {

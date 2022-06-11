@@ -28,7 +28,6 @@ struct KeyState {
     bool buttons[16];
 };
 
-extern "C" void Hello(const char*);
 extern "C" int Initialize(bool, void*);
 extern "C" void Update(KeyState, uint64_t);
 extern "C" void Draw();
@@ -53,7 +52,7 @@ struct Drawable {
     GLuint vao, vbo;
 };
 
-void generateDrawable(Drawable* d, const glm::mat4 transform, function<void(function<void(float)>)> generator) {
+void generateDrawable(Drawable* d, glm::mat4 transform, function<void(function<void(float)>)> generator) {
     *d = { transform, vector<float>(), 0, 0 };
     generator([&](float f){ d->mesh.push_back(f); });
     
@@ -140,13 +139,14 @@ void generateCylinder(function<void(float)> addItem) {
     // index 1 - (k-1) is all the vertices minus the last one
 
     for(int i=1; i<k; i++) {
-        // for each face in the center, what you do is take point i, center, point i+1
-        // to get a clockwise winding order
+        // for each face in the center, what you do is take point i+1, center, point i
+        // to get a counter-clockwise winding order
+        // (for the bottom face, the top face is reversed)
 
-        ADD_FACE(i, 0, i+1);
+        ADD_FACE(i+1, 0, i);
     }
     // for the final face, we need to do vertex k, center, vertex 1
-    ADD_FACE(k, 0, 1);
+    ADD_FACE(1, 0, k);
 
     // for the second circle (the top circle), everything is offset by k+1
     int offset = k+1;
@@ -156,16 +156,16 @@ void generateCylinder(function<void(float)> addItem) {
     // for the final face, we need to do vertex k, center, vertex 1
     ADD_FACE(offset+k, offset+0, offset+1);
 
-    // for the sides, we need to add bottom i+1, top i+1, bottom i
-    // then top i, bottom i, top i+1
+    // for the sides, we need to add bottom i, top i+1, bottom i+1
+    // then top i+1, bottom i, top i
     for(int i=1; i<k; i++) {
-        ADD_FACE(i+1, offset+i+1, i);
-        ADD_FACE(offset+i, i, offset+i+1);
+        ADD_FACE(i, offset+i+1, i+1);
+        ADD_FACE(offset+i+1, i, offset+i);
     }
 
     // for the last side, instead of i and i+1, use k and 1
-    ADD_FACE(2, offset+k, k);
-    ADD_FACE(offset+k, 1, offset+1);
+    ADD_FACE(k, offset+k, 1);
+    ADD_FACE(offset+1, 1, offset+k);
 }
 
 void generateSphere(function<void(float)> addItem) {
@@ -386,8 +386,4 @@ void Cleanup() {
     deleteDrawable(&cylinder);
     deleteDrawable(&ball);
     glDeleteProgram(program);
-}
-
-void Hello(const char* name) {
-    printf("Hello, %s\n", name);
 }

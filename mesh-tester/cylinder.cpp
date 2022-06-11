@@ -50,13 +50,13 @@ void generate() {
     // index 1 - (k-1) is all the vertices minus the last one
 
     for(int i=1; i<k; i++) {
-        // for each face in the center, what you do is take point i, center, point i+1
-        // to get a clockwise winding order
-
-        faces.push_back({i+1, 1, i+2});
+        // for each face in the center, what you do is take point i+1, center, point i
+        // to get a counter-clockwise winding order
+        // (for the bottom face, the top face is reversed)
+        faces.push_back({i+2, 1, i+1});
     }
-    // for the final face, we need to do vertex k, center, vertex 1
-    faces.push_back({k+1, 1, 2});
+    // for the final face, we need to do vertex 1, center, vertex k
+    faces.push_back({2, 1, k+1});
 
     // for the second circle (the top circle), everything is offset by k+1
     int offset = k+1;
@@ -66,16 +66,16 @@ void generate() {
     // for the final face, we need to do vertex k, center, vertex 1
     faces.push_back({offset+k+1, offset+1, offset+2});
 
-    // for the sides, we need to add bottom i+1, top i+1, bottom i
-    // then top i, bottom i, top i+1
+    // for the sides, we need to add bottom i, top i+1, bottom i+1
+    // then top i+1, bottom i, top i
     for(int i=1; i<k; i++) {
-        faces.push_back({i+2, offset+i+1, i+1});
-        faces.push_back({offset+i+1, i+2, offset+i+2});
+        faces.push_back({i+1, offset+i+1, i+2});
+        faces.push_back({offset+i+2, i+2, offset+i+1});
     }
 
     // for the last side, instead of i and i+1, use k and 1
-    faces.push_back({2, offset+k+1, k+1});
-    faces.push_back({offset+k+1, 2, offset+2});
+    faces.push_back({k+1, offset+k+1, 2});
+    faces.push_back({offset+2, 2, offset+k+1});
 }
 
 int main() {
