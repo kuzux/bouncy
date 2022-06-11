@@ -47,37 +47,46 @@ struct GameState {
 // persisted game state
 GameState* st;
 
-struct Drawable {
-    // store position / rotation etc. vectors in the state to calculaste / update this value
-    glm::mat4 transform;
-    vector<float> mesh;
-
+struct Mesh {
+    vector<float> data;
+    // TODO: Store vertices in a separate array and use an element array buffer
     GLuint vao, vbo;
 };
 
-void generateDrawable(Drawable* d, glm::mat4 transform, function<void(function<void(float)>)> generator) {
-    *d = { transform, vector<float>(), 0, 0 };
-    generator([&](float f){ d->mesh.push_back(f); });
-    
-    glGenVertexArrays(1, &d->vao);
-    glBindVertexArray(d->vao);
-    glGenBuffers(1, &d->vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, d->vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*d->mesh.size(), &d->mesh[0], GL_STATIC_DRAW);
-}
-
-void deleteDrawable(Drawable* d) {
-    glDeleteBuffers(1, &d->vbo);
-    glDeleteVertexArrays(1, &d->vao);
-}
+struct Drawable {
+    // store position / rotation etc. vectors in the state to calculaste / update this value
+    glm::mat4 transform;
+    // stored separately to allow for instancing
+    const Mesh* mesh;
+};
 
 // temporaries - regenerated in initialize
+Mesh cylinderMesh;
+Mesh sphereMesh;
+
 Drawable cylinder;
 Drawable ball;
+Drawable ball2;
 GLuint program;
 
 glm::mat4 cylinderTransform;
 glm::mat4 projection;
+
+void generateMesh(Mesh* m, function<void(function<void(float)>)> generator) {
+    *m = { vector<float>(), 0, 0 };
+    generator([&](float f){ m->data.push_back(f); });
+
+    glGenVertexArrays(1, &m->vao);
+    glBindVertexArray(m->vao);
+    glGenBuffers(1, &m->vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*m->data.size(), &m->data[0], GL_STATIC_DRAW);
+}
+
+void deleteMesh(Mesh* m) {
+    glDeleteBuffers(1, &m->vbo);
+    glDeleteVertexArrays(1, &m->vao);
+}
 
 // pass the view-projection matrix to draw it
 void drawDrawable(const Drawable* d, glm::mat4 vp) {
@@ -85,10 +94,10 @@ void drawDrawable(const Drawable* d, glm::mat4 vp) {
     GLuint mvpLocation = glGetUniformLocation(program, "MVP");
     glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
 
-    int numVertices = d->mesh.size() / 3;
+    int numVertices = d->mesh->data.size() / 3;
 
     glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, d->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, d->mesh->vao);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
     glDrawArrays(GL_TRIANGLES, 0, numVertices);
     glDisableVertexAttribArray(0);
@@ -252,8 +261,11 @@ int Initialize(bool reinit, void* state_) {
     }
 
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
-    generateDrawable(&cylinder, cylinderTransform, generateCylinder);
-    generateDrawable(&ball, ballTransformFromState(), generateSphere);
+    generateMesh(&cylinderMesh, generateCylinder);
+    generateMesh(&sphereMesh, generateSphere);
+    cylinder = { cylinderTransform, &cylinderMesh };
+    ball = { ballTransformFromState(), &sphereMesh };
+    ball2 = { glm::translate(ball.transform, glm::vec3(3.f, 0.f, 3.f)), &sphereMesh };
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
@@ -374,6 +386,7 @@ void Update(KeyState keys, uint64_t dt_ms) {
         st->ballPosition = glm::vec3(2.f, .3f, 2.f);
     }
     ball.transform = ballTransformFromState();
+    ball2.transform = glm::translate(ball.transform, glm::vec3(3.f, 0.f, 3.f));
 }
 
 void Draw() {
@@ -384,10 +397,11 @@ void Draw() {
     glUseProgram(program);
     drawDrawable(&cylinder, vp);
     drawDrawable(&ball, vp);
+    drawDrawable(&ball2, vp);
 }
 
 void Cleanup() {
-    deleteDrawable(&cylinder);
-    deleteDrawable(&ball);
+    deleteMesh(&cylinderMesh);
+    deleteMesh(&sphereMesh);
     glDeleteProgram(program);
 }
