@@ -63,10 +63,12 @@ struct Drawable {
 // temporaries - regenerated in initialize
 Mesh cylinderMesh;
 Mesh sphereMesh;
+Mesh platformMesh;
 
 Drawable cylinder;
 Drawable ball;
 Drawable ball2;
+vector<Drawable> platformSections;
 GLuint program;
 
 glm::mat4 cylinderTransform;
@@ -122,7 +124,7 @@ void generateCylinder(function<void(float)> addItem) {
     // how many vertices in a circle
     int k = 40;
 
-    float h = 10.0f;
+    float h = 12.0f;
 
     float delta = 2*PI / k;
 
@@ -238,7 +240,119 @@ void generateSphere(function<void(float)> addItem) {
     #undef IDX0
 }
 
+void generatePlatformSection(function<void(float)> addItem) {
+    vector<glm::vec3> vertices;
+
+    // how many vertices in an arc
+    int k = 5;
+
+    float h = .1f;
+    // inner & outer radii
+    float r1 = 1.f;
+    float r2 = 2.f;
+
+    // each platform has 32 segments
+    float delta = (2*PI/32) / (k-1);
+    // the angle of each line within the arc 
+
+    // vertices consist of 4 "rings"
+    // vertex 0 .. k-1 => bottom inner
+    // vertex k .. 2k-1 => bottom outer
+    // vertex 2k .. 3k - 1 => top inner
+    // vertex 3k .. 4k-1 => top outer
+    
+    float rads = 0.f;
+    for(int i=0; i<k; i++) {
+        float x = r1*cos(rads);
+        float z = r1*sin(rads);
+        vertices.push_back({x, 0.f, z});
+
+        rads += delta;
+    }
+
+    rads = 0.f;
+    for(int i=0; i<k; i++) {
+        float x = r2*cos(rads);
+        float z = r2*sin(rads);
+        vertices.push_back({x, 0.f, z});
+
+        rads += delta;
+    }
+
+    rads = 0.f;
+    for(int i=0; i<k; i++) {
+        float x = r1*cos(rads);
+        float z = r1*sin(rads);
+        vertices.push_back({x, h, z});
+
+        rads += delta;
+    }
+
+    rads = 0.f;
+    for(int i=0; i<k; i++) {
+        float x = r2*cos(rads);
+        float z = r2*sin(rads);
+        vertices.push_back({x, h, z});
+
+        rads += delta;
+    }
+
+    // bottom face
+    for(int i=0; i<k-1; i++) {
+        ADD_FACE(i, k+i, i+1);
+        ADD_FACE(i+1, k+i, k+i+1);
+    }
+
+    // top face
+    for(int i=0; i<k-1; i++) {
+        ADD_FACE(2*k+i+1, 3*k+i, 2*k+i);
+        ADD_FACE(3*k+i+1, 3*k+i, 2*k+i+1);
+    }
+
+    // side faces similar
+    // bottom i, top i, bottom i+1
+    // bottom i+1, top i, top i+1
+    for(int i=0; i<k-1; i++) {
+        // inner ring
+        // the winding is reverse, since the "inside" face is front-facing
+        ADD_FACE(i+1, 2*k+i, i);
+        ADD_FACE(2*k+i+1, 2*k+i, i+1);
+        // outer ring
+        ADD_FACE(k+i, 3*k+i, k+i+1);
+        ADD_FACE(k+i+1, 3*k+i, 3*k+i+1);
+    }
+
+    // side with i=0
+    // top outer - bottom outer - bottom inner
+    // top inner - top outer - bottom inner
+    ADD_FACE(3*k, k, 0);
+    ADD_FACE(2*k, 3*k, 0);
+
+    // similarly with i=k-1
+    // but the winding is reversed again
+    ADD_FACE(k-1, k+k-1, 3*k+k-1);
+    ADD_FACE(k-1, 3*k+k-1, 2*k+k-1);
+}
+
 #undef ADD_FACE
+
+void generatePlatforms() {
+    float theta = 0.0;
+    float delta = 2*PI / 32;
+    glm::vec3 axis = glm::vec3(0.f, 1.f, 0.f);
+
+    int numLevels = 5;
+    float levelHeight = 2.f;
+    float height = 0.f;
+    for(int l=0; l<numLevels; l++) {
+        glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
+        for(int i=0; i<32; i++) {
+            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta, axis), &platformMesh });
+            theta += delta;
+        }
+        height += levelHeight;
+    }
+}
 
 glm::mat4 ballTransformFromState() {
     return glm::scale(glm::translate(glm::mat4(1.f), st->ballPosition), glm::vec3(.3f));
@@ -263,9 +377,11 @@ int Initialize(bool reinit, void* state_) {
     glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
     generateMesh(&cylinderMesh, generateCylinder);
     generateMesh(&sphereMesh, generateSphere);
+    generateMesh(&platformMesh, generatePlatformSection);
     cylinder = { cylinderTransform, &cylinderMesh };
     ball = { ballTransformFromState(), &sphereMesh };
     ball2 = { glm::translate(ball.transform, glm::vec3(3.f, 0.f, 3.f)), &sphereMesh };
+    generatePlatforms();
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
@@ -398,6 +514,9 @@ void Draw() {
     drawDrawable(&cylinder, vp);
     drawDrawable(&ball, vp);
     drawDrawable(&ball2, vp);
+    for(auto& ps : platformSections) {
+        drawDrawable(&ps, vp);
+    }
 }
 
 void Cleanup() {

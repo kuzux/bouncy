@@ -21,15 +21,17 @@ void generate() {
     #define ADD_FACE(i, j, k) faces.push_back({i+1, j+1, k+1})
 
     // how many vertices in an arc
-    int k = 10;
+    int k = 5;
 
     float h = .1f;
     // inner & outer radii
     float r1 = 1.f;
     float r2 = 2.f;
 
-    // each platform has 12 segments
-    float delta = (2*PI/12) / k;
+    // each platform has 32 segments
+    float delta = (2*PI/32) / (k-1);
+    // the angle of each line within the arc is actually 1/(k-1) times the total length since 
+    // one of the points is supposed to interact with the next one
 
     // vertices consist of 4 "rings"
     // vertex 0 .. k-1 => bottom inner
