@@ -253,7 +253,8 @@ void generatePlatformSection(function<void(float)> addItem) {
 
     // each platform has 32 segments
     float delta = (2*PI/32) / (k-1);
-    // the angle of each line within the arc 
+    // the angle of each line within the arc is actually 1/(k-1) times the total length since 
+    // one of the points is supposed to interact with the next one
 
     // vertices consist of 4 "rings"
     // vertex 0 .. k-1 => bottom inner
