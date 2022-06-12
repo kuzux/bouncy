@@ -193,11 +193,14 @@ void generateSphere(function<void(float)> addItem) {
     // how many vertices in a circle
     int k = 40;
 
-    // the sphere has k "levels" - each level corresponds to a y value (between 1 and -1)
-    float delta_y = 2.0f / k;
-    float y = 1.0f;
+    // the sphere has k "levels"
+    // the sphere's "levels" are denoted by an angle phi, between pi/2 and -pi/2
+
+    float delta_phi = PI / k;
+    float phi = PI / 2;
     for(int i=0; i<k; i++) {
-        float r = sqrtf(1.0f - y * y);
+        float y = sin(phi);
+        float r = cos(phi);
 
         // each level then contains a circle
         float theta = 0.0f;
@@ -210,7 +213,7 @@ void generateSphere(function<void(float)> addItem) {
             theta += delta_th;
         }
 
-        y -= delta_y;
+        phi -= delta_phi;
     }
 
     // to get vertex (i, j) we need to do i*k+j (+1 for 1 based index)
