@@ -84,7 +84,7 @@ void generateMesh(Mesh* m, function<void(function<void(float)>)> generator) {
     glBindVertexArray(m->vao);
     glGenBuffers(1, &m->vbo);
     glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float)*m->data.size(), &m->data[0], GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat)*m->data.size(), &m->data[0], GL_STATIC_DRAW);
 }
 
 void deleteMesh(Mesh* m) {
@@ -92,56 +92,90 @@ void deleteMesh(Mesh* m) {
     glDeleteVertexArrays(1, &m->vao);
 }
 
-// pass the view-projection matrix to draw it
-void drawDrawable(const Drawable* d, glm::mat4 vp) {
-    glm::mat4 mvp = vp * (d->transform);
-    GLuint mvpLocation = glGetUniformLocation(program, "MVP");
-    glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, &mvp[0][0]);
+// pass the view and projection matrices to draw it
+void drawDrawable(const Drawable* d, glm::mat4 v, glm::mat4 p) {
+    GLuint mLocation = glGetUniformLocation(program, "M");
+    glUniformMatrix4fv(mLocation, 1, GL_FALSE, &d->transform[0][0]);
+
+    GLuint vLocation = glGetUniformLocation(program, "V");
+    glUniformMatrix4fv(vLocation, 1, GL_FALSE, &v[0][0]);
+    
+    GLuint pLocation = glGetUniformLocation(program, "P");
+    glUniformMatrix4fv(pLocation, 1, GL_FALSE, &p[0][0]);
 
     GLuint colorLocation = glGetUniformLocation(program, "ObjectColor");
     glUniform3fv(colorLocation, 1, &d->color[0]);
 
-    int numVertices = d->mesh->data.size() / 3;
+    int numVertices = d->mesh->data.size() / 6;
 
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(2);
     glBindBuffer(GL_ARRAY_BUFFER, d->mesh->vao);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(GLfloat), (void*)0);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 6*sizeof(GLfloat), (void*)(3*sizeof(GLfloat)));
     glDrawArrays(GL_TRIANGLES, 0, numVertices);
     glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(2);
 }
 
 #define PI 3.141592f
 
-#define ADD_FACE(i, j, k) { \
+#define ADD_FACE(i, j, k, ni, nj, nk) { \
     addItem(vertices[(i)].x); \
     addItem(vertices[(i)].y); \
     addItem(vertices[(i)].z); \
+    addItem(normals[(ni)].x); \
+    addItem(normals[(ni)].y); \
+    addItem(normals[(ni)].z); \
+    \
     addItem(vertices[(j)].x); \
     addItem(vertices[(j)].y); \
     addItem(vertices[(j)].z); \
+    addItem(normals[(nj)].x); \
+    addItem(normals[(nj)].y); \
+    addItem(normals[(nj)].z); \
+    \
     addItem(vertices[(k)].x); \
     addItem(vertices[(k)].y); \
     addItem(vertices[(k)].z); \
+    addItem(normals[(nk)].x); \
+    addItem(normals[(nk)].y); \
+    addItem(normals[(nk)].z); \
 }
 
 void generateCylinder(function<void(float)> addItem) {
     vector<glm::vec3> vertices;
+    vector<glm::vec3> normals;
+    
     // how many vertices in a circle
     int k = 40;
 
-    float h = 12.0f;
+    float h = 10.0f;
 
     float delta = 2*PI / k;
 
+    // vertex 0 is bottom face center
+    // vertex 1 .. k is bottom face edges
+    // vertex k+1 is top face center
+    // vertex k+2 .. 2k+1 is top face edges
+
+    // normal 0 is bottom face
+    // normals 1 .. k are outwards from the edges
+    // normal k+1 is top face
+    
     vertices.push_back({ 0.0f, 0.0f, 0.0f }); // center
+    normals.push_back({ 0.f, -1.f, 0.f });
     float rads = 0.0;
     for(int i=0; i<k; i++) {
         float x = cos(rads);
         float z = sin(rads);
         vertices.push_back({x, 0.0f, z});
+        normals.push_back({ x, 0.f, z });
 
         rads += delta;
     }
+
+    normals.push_back({ 0.f, 1.f, 0.f });
 
     // the second circle
     vertices.push_back({ 0.0f, h, 0.0f }); // center
@@ -157,42 +191,49 @@ void generateCylinder(function<void(float)> addItem) {
     // index 0 is center
     // index 1 - (k-1) is all the vertices minus the last one
 
+    // the bottom face all has bottom face normals, obviously
+
     for(int i=1; i<k; i++) {
         // for each face in the center, what you do is take point i+1, center, point i
         // to get a counter-clockwise winding order
         // (for the bottom face, the top face is reversed)
-
-        ADD_FACE(i+1, 0, i);
+        ADD_FACE(i+1, 0, i, 0, 0, 0);
     }
-    // for the final face, we need to do vertex k, center, vertex 1
-    ADD_FACE(1, 0, k);
+    // for the final face, we need to do vertex 1, center, vertex k
+    ADD_FACE(1, 0, k, 0, 0, 0);
 
     // for the second circle (the top circle), everything is offset by k+1
     int offset = k+1;
     for(int i=1; i<k; i++) {
-        ADD_FACE(offset+i, offset+0, offset+i+1);
+        ADD_FACE(offset+i, offset+0, offset+i+1, k+1, k+1, k+1);
     }
     // for the final face, we need to do vertex k, center, vertex 1
-    ADD_FACE(offset+k, offset+0, offset+1);
+    ADD_FACE(offset+k, offset+0, offset+1, k+1, k+1, k+1);
 
     // for the sides, we need to add bottom i, top i+1, bottom i+1
     // then top i+1, bottom i, top i
+
+    // for the side normals, vertex i has the normal i as well
+
     for(int i=1; i<k; i++) {
-        ADD_FACE(i, offset+i+1, i+1);
-        ADD_FACE(offset+i+1, i, offset+i);
+        ADD_FACE(i, offset+i, i+1, i, i, i+1);
+        ADD_FACE(offset+i+1, i+1, offset+i, i+1, i+1, i);
     }
 
     // for the last side, instead of i and i+1, use k and 1
-    ADD_FACE(k, offset+k, 1);
-    ADD_FACE(offset+1, 1, offset+k);
+    ADD_FACE(k, offset+k, 1, k, k, 1);
+    ADD_FACE(offset+1, 1, offset+k, 1, 1, k);
 }
 
 void generateSphere(function<void(float)> addItem) {
     vector<glm::vec3> vertices;
+    vector<glm::vec3> normals;
+
+    #define ADD_FACE2(i, j, k) ADD_FACE(i, j, k, i, j, k)
 
     // how many vertices in a circle
     int k = 40;
-
+    
     // the sphere has k "levels"
     // the sphere's "levels" are denoted by an angle phi, between pi/2 and -pi/2
 
@@ -209,6 +250,8 @@ void generateSphere(function<void(float)> addItem) {
             float x = r*cos(theta);
             float z = r*sin(theta);
             vertices.push_back({x, y, z});
+            // for normals, each vertex has its own normal and its value is equal to itself
+            normals.push_back({x, y, z});
 
             theta += delta_th;
         }
@@ -224,32 +267,35 @@ void generateSphere(function<void(float)> addItem) {
     // and (i-1, j-1) - (i, j-1) - (i-1, j)
     for(int i=1; i<k; i++) {
         for(int j=1; j<k; j++) {
-            ADD_FACE(IDX0(i, j), IDX0(i-1, j), IDX0(i, j-1));
-            ADD_FACE(IDX0(i-1, j-1), IDX0(i, j-1), IDX0(i-1, j));
+            ADD_FACE2(IDX0(i, j), IDX0(i-1, j), IDX0(i, j-1));
+            ADD_FACE2(IDX0(i-1, j-1), IDX0(i, j-1), IDX0(i-1, j));
         }
 
         // add the final face, use j-1 = k-1, j=0
-        ADD_FACE(IDX0(i, 0), IDX0(i-1, 0), IDX0(i, k-1));
-        ADD_FACE(IDX0(i-1, k-1), IDX0(i, k-1), IDX0(i-1, 0));
+        ADD_FACE2(IDX0(i, 0), IDX0(i-1, 0), IDX0(i, k-1));
+        ADD_FACE2(IDX0(i-1, k-1), IDX0(i, k-1), IDX0(i-1, 0));
     }
 
     // add a 2d circle for closing the final layer (use i=k-1)
     vertices.push_back({ 0.0f, -1.0f, 0.0f }); // center of the circle, has index k*k
+    normals.push_back({ 0.0f, -1.0f, 0.0f });
     int final_center = k*k;
 
     for(int j=1; j<k; j++) {
         // for each face in the center, what you do is take point i, center, point i+1
-        // to get a clockwise winding order
+        // to get a counter clockwise winding order
 
-        ADD_FACE(IDX0(k-1, j-1), final_center, IDX0(k-1, j));
+        ADD_FACE2(IDX0(k-1, j-1), final_center, IDX0(k-1, j));
     }
-    ADD_FACE(IDX0(k-1, k-1), final_center, IDX0(k-1, 0));
+    ADD_FACE2(IDX0(k-1, k-1), final_center, IDX0(k-1, 0));
 
+    #undef ADD_FACE2
     #undef IDX0
 }
 
 void generatePlatformSection(function<void(float)> addItem) {
     vector<glm::vec3> vertices;
+    vector<glm::vec3> normals;
 
     // how many vertices in an arc
     int k = 5;
@@ -267,14 +313,26 @@ void generatePlatformSection(function<void(float)> addItem) {
     // vertices consist of 4 "rings"
     // vertex 0 .. k-1 => bottom inner
     // vertex k .. 2k-1 => bottom outer
-    // vertex 2k .. 3k - 1 => top inner
+    // vertex 2k .. 3k-1 => top inner
     // vertex 3k .. 4k-1 => top outer
+
+    // the normals are as follows:
+    // normal 0 => bottom face
+    // normal 1 => top face
+    // normal 2 .. k+1 => inner face
+    // normal k+2 .. 2k+1 => outer face
+    // normal 2k+2 => side a (theta = 0)
+    // normal 2k+3 => side b (theta != 0)
+
+    normals.push_back({ 0.f, -1.f, 0.f });
+    normals.push_back({ 0.f, 1.f, 0.f });
     
     float rads = 0.f;
     for(int i=0; i<k; i++) {
         float x = r1*cos(rads);
         float z = r1*sin(rads);
         vertices.push_back({x, 0.f, z});
+        normals.push_back({-x, 0.f, -z});
 
         rads += delta;
     }
@@ -284,11 +342,13 @@ void generatePlatformSection(function<void(float)> addItem) {
         float x = r2*cos(rads);
         float z = r2*sin(rads);
         vertices.push_back({x, 0.f, z});
+        normals.push_back({x, 0.f, z});
 
         rads += delta;
     }
 
     rads = 0.f;
+    normals.push_back({ -1, 0, 0 });
     for(int i=0; i<k; i++) {
         float x = r1*cos(rads);
         float z = r1*sin(rads);
@@ -305,17 +365,18 @@ void generatePlatformSection(function<void(float)> addItem) {
 
         rads += delta;
     }
+    normals.push_back({ -cos(rads), 0, -sin(rads) });
 
     // bottom face
     for(int i=0; i<k-1; i++) {
-        ADD_FACE(i, k+i, i+1);
-        ADD_FACE(i+1, k+i, k+i+1);
+        ADD_FACE(i, k+i, i+1, 0, 0, 0);
+        ADD_FACE(i+1, k+i, k+i+1, 0, 0, 0);
     }
 
     // top face
     for(int i=0; i<k-1; i++) {
-        ADD_FACE(2*k+i+1, 3*k+i, 2*k+i);
-        ADD_FACE(3*k+i+1, 3*k+i, 2*k+i+1);
+        ADD_FACE(2*k+i+1, 3*k+i, 2*k+i, 1, 1, 1);
+        ADD_FACE(3*k+i+1, 3*k+i, 2*k+i+1, 1, 1, 1);
     }
 
     // side faces similar
@@ -324,23 +385,23 @@ void generatePlatformSection(function<void(float)> addItem) {
     for(int i=0; i<k-1; i++) {
         // inner ring
         // the winding is reverse, since the "inside" face is front-facing
-        ADD_FACE(i+1, 2*k+i, i);
-        ADD_FACE(2*k+i+1, 2*k+i, i+1);
+        ADD_FACE(i+1, 2*k+i, i, i+3, i+2, i+2);
+        ADD_FACE(2*k+i+1, 2*k+i, i+1, i+3, i+2, i+3);
         // outer ring
-        ADD_FACE(k+i, 3*k+i, k+i+1);
-        ADD_FACE(k+i+1, 3*k+i, 3*k+i+1);
+        ADD_FACE(k+i, 3*k+i, k+i+1, k+i+2, k+i+2, k+i+3);
+        ADD_FACE(k+i+1, 3*k+i, 3*k+i+1, k+i+3, k+i+2, k+i+3);
     }
 
     // side with i=0
     // top outer - bottom outer - bottom inner
     // top inner - top outer - bottom inner
-    ADD_FACE(3*k, k, 0);
-    ADD_FACE(2*k, 3*k, 0);
+    ADD_FACE(3*k, k, 0, 2*k+2, 2*k+2, 2*k+2);
+    ADD_FACE(2*k, 3*k, 0, 2*k+2, 2*k+2, 2*k+2);
 
     // similarly with i=k-1
     // but the winding is reversed again
-    ADD_FACE(k-1, k+k-1, 3*k+k-1);
-    ADD_FACE(k-1, 3*k+k-1, 2*k+k-1);
+    ADD_FACE(k-1, k+k-1, 3*k+k-1, 2*k+3, 2*k+3, 2*k+3);
+    ADD_FACE(k-1, 3*k+k-1, 2*k+k-1, 2*k+3, 2*k+3, 2*k+3);
 }
 
 #undef ADD_FACE
@@ -539,10 +600,10 @@ void Draw() {
     glm::mat4 vp = projection * view;
 
     glUseProgram(program);
-    drawDrawable(&cylinder, vp);
-    drawDrawable(&ball, vp);
+    drawDrawable(&cylinder, view, projection);
+    drawDrawable(&ball, view, projection);
     for(auto& ps : platformSections) {
-        drawDrawable(&ps, vp);
+        drawDrawable(&ps, view, projection);
     }
 }
 
