@@ -76,6 +76,8 @@ glm::mat4 cylinderTransform;
 glm::mat4 view;
 glm::mat4 projection;
 
+glm::vec3 lightPosition;
+
 void generateMesh(Mesh* m, function<void(function<void(float)>)> generator) {
     *m = { vector<float>(), 0, 0 };
     generator([&](float f){ m->data.push_back(f); });
@@ -105,6 +107,9 @@ void drawDrawable(const Drawable* d, glm::mat4 v, glm::mat4 p) {
 
     GLuint colorLocation = glGetUniformLocation(program, "ObjectColor");
     glUniform3fv(colorLocation, 1, &d->color[0]);
+
+    GLuint lightLocation = glGetUniformLocation(program, "LightPosition_worldspace");
+    glUniform3fv(lightLocation, 1, &lightPosition[0]);
 
     int numVertices = d->mesh->data.size() / 6;
 
@@ -233,6 +238,8 @@ void generateSphere(function<void(float)> addItem) {
 
     // how many vertices in a circle
     int k = 40;
+    // radius of the sphere
+    float r = .3f;
     
     // the sphere has k "levels"
     // the sphere's "levels" are denoted by an angle phi, between pi/2 and -pi/2
@@ -240,15 +247,15 @@ void generateSphere(function<void(float)> addItem) {
     float delta_phi = PI / k;
     float phi = PI / 2;
     for(int i=0; i<k; i++) {
-        float y = sin(phi);
-        float r = cos(phi);
+        float y = r*sin(phi);
+        float currR = r*cos(phi);
 
         // each level then contains a circle
         float theta = 0.0f;
         float delta_th = 2 * PI / k;
         for(int i=0; i<k; i++) {
-            float x = r*cos(theta);
-            float z = r*sin(theta);
+            float x = currR*cos(theta);
+            float z = currR*sin(theta);
             vertices.push_back({x, y, z});
             // for normals, each vertex has its own normal and its value is equal to itself
             normals.push_back({x, y, z});
@@ -277,7 +284,7 @@ void generateSphere(function<void(float)> addItem) {
     }
 
     // add a 2d circle for closing the final layer (use i=k-1)
-    vertices.push_back({ 0.0f, -1.0f, 0.0f }); // center of the circle, has index k*k
+    vertices.push_back({ 0.0f, -r, 0.0f }); // center of the circle, has index k*k
     normals.push_back({ 0.0f, -1.0f, 0.0f });
     int final_center = k*k;
 
@@ -427,7 +434,7 @@ void generatePlatforms() {
 }
 
 glm::mat4 ballTransformFromState() {
-    return glm::scale(glm::translate(glm::mat4(1.f), st->ballPosition), glm::vec3(.3f));
+    return glm::translate(glm::mat4(1.f), st->ballPosition);
 }
 
 glm::mat4 cameraTransformFromState() {
@@ -465,6 +472,8 @@ int Initialize(bool reinit, void* state_) {
     cylinder = { cylinderTransform, &cylinderMesh, blue };
     ball = { ballTransformFromState(), &sphereMesh, red };
     generatePlatforms();
+
+    lightPosition = { 2.f, 15.f, -2.f };
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);

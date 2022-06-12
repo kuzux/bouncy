@@ -140,6 +140,14 @@ int main(int argc, char** argv) {
                 case SDLK_q:
                     keys.buttons[2] = true;
                     break;
+
+                case SDLK_r:
+                    // force reload game
+                    rc = ReloadGamelib(argv[1]);
+                    if(rc) return rc;
+                    rc = _Initialize(true, gameState);
+                    if(rc) return rc;
+                    break;
                 }
             } else if(e.type == SDL_KEYUP) {
                 switch(e.key.keysym.sym) {
