@@ -56,6 +56,7 @@ struct Mesh {
 };
 
 struct Drawable {
+    bool visible;
     // store position / rotation etc. vectors in the state to calculaste / update this value
     glm::mat4 transform;
     // stored separately to allow for instancing
@@ -100,6 +101,8 @@ void deleteMesh(Mesh* m) {
 
 // pass the view and projection matrices to draw it
 void drawDrawable(const Drawable* d, glm::mat4 v, glm::mat4 p) {
+    if(!d->visible) return;
+
     GLuint mLocation = glGetUniformLocation(program, "M");
     glUniformMatrix4fv(mLocation, 1, GL_FALSE, &d->transform[0][0]);
 
@@ -418,22 +421,18 @@ void generatePlatformSection(function<void(float)> addItem) {
 #undef ADD_FACE
 
 void generatePlatforms() {
-    float theta = 0.0;
-    float delta = 2*PI / 32;
-    glm::vec3 axis(0.f, 1.f, 0.f);
-
     glm::vec3 blue(0.f, 0.f, 1.f);
 
     int numLevels = 5;
     float levelHeight = 2.f;
     float height = 0.f;
     for(int l=0; l<numLevels; l++) {
-        glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
         for(int i=0; i<32; i++) {
-            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta+st->cylinderRotation, axis), &platformMesh, blue });
-            theta += delta;
+            bool v = true;
+            if(i%3 == 0) v = false;
+            // transforms will be updated by the update function
+            platformSections.push_back({ v, glm::mat4(1.f), &platformMesh, blue });
         }
-        height += levelHeight;
     }
 }
 
@@ -448,7 +447,8 @@ void updatePlatformTransformsFromState() {
     for(int l=0; l<numLevels; l++) {
         glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
         for(int i=0; i<32; i++) {
-            if(i%3 != 0) platformSections[l*32+i].transform = glm::rotate(base, theta + st->cylinderRotation, axis);
+            Drawable* d = &platformSections[l*32+i];
+            d->transform = glm::rotate(base, theta + st->cylinderRotation, axis);
             theta += delta;
         }
         height += levelHeight;
@@ -495,9 +495,10 @@ int Initialize(bool reinit, void* state_) {
     generateMesh(&cylinderMesh, generateCylinder);
     generateMesh(&sphereMesh, generateSphere);
     generateMesh(&platformMesh, generatePlatformSection);
-    cylinder = { cylinderTransformFromState(), &cylinderMesh, blue };
-    ball = { ballTransformFromState(), &sphereMesh, red };
+    cylinder = { true, cylinderTransformFromState(), &cylinderMesh, blue };
+    ball = { true, ballTransformFromState(), &sphereMesh, red };
     generatePlatforms();
+    updatePlatformTransformsFromState();
 
     float lightY = 15.f;
     for(int i=0; i<10; i++) {
@@ -616,7 +617,7 @@ void Update(KeyState keys, uint64_t dt_ms) {
         st->cameraHeight = st->ballPosition.y + 1.f;
     }
 
-    cylinder.transform = cylinderTransformFromState();;
+    cylinder.transform = cylinderTransformFromState();
     ball.transform = ballTransformFromState();
     updatePlatformTransformsFromState();
 
