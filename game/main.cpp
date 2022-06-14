@@ -44,6 +44,8 @@ struct GameState {
     glm::vec3 ballPosition;
     glm::vec3 ballVelocity;
     glm::vec3 ballForce;
+
+    int randomSeed;
 };
 
 // persisted game state
@@ -427,9 +429,25 @@ void generatePlatforms() {
     float levelHeight = 2.f;
     float height = 0.f;
     for(int l=0; l<numLevels; l++) {
+        int numHoles = 1 + rand() % 2;
+        int holeWidth = 4 + rand() % 4; // in sections
+        int holeOffset = rand() % 32;
+
         for(int i=0; i<32; i++) {
             bool v = true;
-            if(i%3 == 0) v = false;
+
+            int holeBegin = holeOffset;
+            int holeEnd = (holeBegin + holeWidth) % 32;
+            if(i >= holeBegin && i < holeEnd) v = false;
+            if(holeEnd < holeBegin && i < holeEnd) v = false;
+
+            if(numHoles > 1) {
+                int holeBegin = (holeOffset + 16) % 32;
+                int holeEnd = (holeBegin + holeWidth) % 32;
+                if(i >= holeBegin && i < holeEnd) v = false;
+                if(holeEnd < holeBegin && i < holeEnd) v = false;
+            }
+
             // transforms will be updated by the update function
             platformSections.push_back({ v, glm::mat4(1.f), &platformMesh, blue });
         }
@@ -483,7 +501,11 @@ int Initialize(bool reinit, void* state_) {
         st->ballForce = glm::vec3(0.f, 10.f, 0.f);
 
         st->cameraHeight = st->ballPosition.y;
+
+        st->randomSeed = time(NULL);
     }
+
+    srand(st->randomSeed);
 
     view = cameraTransformFromState();
 
