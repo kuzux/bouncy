@@ -39,6 +39,8 @@ extern "C" void Cleanup();
 struct GameState {
     float cameraHeight;
 
+    float cylinderRotation;
+
     glm::vec3 ballPosition;
     glm::vec3 ballVelocity;
     glm::vec3 ballForce;
@@ -76,7 +78,9 @@ glm::mat4 cylinderTransform;
 glm::mat4 view;
 glm::mat4 projection;
 
-glm::vec3 lightPosition;
+// the memory layout of this is continous x y z x y z x ... valuues
+// so it should work ok when passed to a shader as &vec[0]
+vector<glm::vec3> lightPositions;
 
 void generateMesh(Mesh* m, function<void(function<void(float)>)> generator) {
     *m = { vector<float>(), 0, 0 };
@@ -108,8 +112,8 @@ void drawDrawable(const Drawable* d, glm::mat4 v, glm::mat4 p) {
     GLuint colorLocation = glGetUniformLocation(program, "ObjectColor");
     glUniform3fv(colorLocation, 1, &d->color[0]);
 
-    GLuint lightLocation = glGetUniformLocation(program, "LightPosition_worldspace");
-    glUniform3fv(lightLocation, 1, &lightPosition[0]);
+    GLuint lightLocation = glGetUniformLocation(program, "LightPositions_worldspace");
+    glUniform3fv(lightLocation, 1, &lightPositions[0][0]);
 
     int numVertices = d->mesh->data.size() / 6;
 
@@ -426,7 +430,25 @@ void generatePlatforms() {
     for(int l=0; l<numLevels; l++) {
         glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
         for(int i=0; i<32; i++) {
-            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta, axis), &platformMesh, blue });
+            if(i%3 != 0) platformSections.push_back({ glm::rotate(base, theta+st->cylinderRotation, axis), &platformMesh, blue });
+            theta += delta;
+        }
+        height += levelHeight;
+    }
+}
+
+void updatePlatformTransformsFromState() {
+    float theta = 0.0;
+    float delta = 2*PI / 32;
+    glm::vec3 axis(0.f, 1.f, 0.f);
+
+    int numLevels = 5;
+    float levelHeight = 2.f;
+    float height = 0.f;
+    for(int l=0; l<numLevels; l++) {
+        glm::mat4 base = glm::translate(cylinderTransform, glm::vec3(0.f, height, 0.f));
+        for(int i=0; i<32; i++) {
+            if(i%3 != 0) platformSections[l*32+i].transform = glm::rotate(base, theta + st->cylinderRotation, axis);
             theta += delta;
         }
         height += levelHeight;
@@ -435,6 +457,10 @@ void generatePlatforms() {
 
 glm::mat4 ballTransformFromState() {
     return glm::translate(glm::mat4(1.f), st->ballPosition);
+}
+
+glm::mat4 cylinderTransformFromState() {
+    return glm::rotate(glm::mat4(1.f), st->cylinderRotation, glm::vec3(0.f, 1.f, 0.f));
 }
 
 glm::mat4 cameraTransformFromState() {
@@ -469,11 +495,15 @@ int Initialize(bool reinit, void* state_) {
     generateMesh(&cylinderMesh, generateCylinder);
     generateMesh(&sphereMesh, generateSphere);
     generateMesh(&platformMesh, generatePlatformSection);
-    cylinder = { cylinderTransform, &cylinderMesh, blue };
+    cylinder = { cylinderTransformFromState(), &cylinderMesh, blue };
     ball = { ballTransformFromState(), &sphereMesh, red };
     generatePlatforms();
 
-    lightPosition = { 2.f, 15.f, -2.f };
+    float lightY = 15.f;
+    for(int i=0; i<10; i++) {
+        lightPositions.push_back({ 2.f, lightY, -2.f });
+        lightY -= 1.5f;
+    }
 
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
@@ -562,22 +592,10 @@ int Initialize(bool reinit, void* state_) {
 
 // the delta t is in milliseconds
 void Update(KeyState keys, uint64_t dt_ms) {
-    float x = 0.f, y = 0.f, z = 0.f;
     float dt = dt_ms / 1000.f;
-    if(keys.dirs.down) z -= 1.f;
-    if(keys.dirs.up) z += 1.f;
-    if(keys.dirs.left) x -= 1.f;
-    if(keys.dirs.right) x += 1.f;
-    if(keys.buttons[1]) y -= 1.f;
-    if(keys.buttons[2]) y += 1.f;
 
-    /*if(x != 0 || y != 0 || z != 0) {
-        if(keys.buttons[0]) {
-            st->cameraTransform = glm::rotate(st->cameraTransform, dt, glm::normalize(glm::vec3(x, y, z)));
-        } else {
-            st->cameraTransform = glm::translate(st->cameraTransform, dt*glm::vec3(x, y, z));
-        }
-    }*/
+    if(keys.dirs.left) st->cylinderRotation -= .05f;
+    if(keys.dirs.right) st->cylinderRotation += .05f;
 
     float ballMass = 2.f;
 
@@ -586,7 +604,6 @@ void Update(KeyState keys, uint64_t dt_ms) {
 
     st->ballForce += ballMass * glm::vec3(0.f, -9.8f, 0.f) * dt; // gravity
 
-    // printf("ball y %f vy %f\n", st->ballPosition.y, st->ballVelocity.y);
     if(st->ballPosition.y < .3f) {
         // let it bounce
         st->ballForce = glm::vec3(0.f, 10.f, 0.f);
@@ -599,7 +616,10 @@ void Update(KeyState keys, uint64_t dt_ms) {
         st->cameraHeight = st->ballPosition.y + 1.f;
     }
 
+    cylinder.transform = cylinderTransformFromState();;
     ball.transform = ballTransformFromState();
+    updatePlatformTransformsFromState();
+
     view = cameraTransformFromState();
 }
 
