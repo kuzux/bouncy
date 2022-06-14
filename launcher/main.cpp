@@ -141,11 +141,18 @@ int main(int argc, char** argv) {
                     keys.buttons[2] = true;
                     break;
 
-                case SDLK_r:
+                case SDLK_l:
                     // force reload game
                     rc = ReloadGamelib(argv[1]);
                     if(rc) return rc;
                     rc = _Initialize(true, gameState);
+                    if(rc) return rc;
+                    break;
+                case SDLK_r:
+                    // force restart game
+                    rc = ReloadGamelib(argv[1]);
+                    if(rc) return rc;
+                    rc = _Initialize(false, gameState);
                     if(rc) return rc;
                     break;
                 }
